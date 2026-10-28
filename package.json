@@ -1,0 +1,25 @@
+{
+  "name": "fs-management",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/achdif/fs-management.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/achdif/fs-management/issues"
+  },
+  "homepage": "https://github.com/achdif/fs-management#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "turbo": "^2.11.10",
+    "typescript": "^7.0.2"
+  }
+}
