@@ -4,3 +4,5 @@ packages:
 allowBuilds:
   bufferutil: true
   utf-8-validate: true
+minimumReleaseAgeExclude:
+  - react-native-screens@4.31.0-nightly-20261105-e3e4f4eb9

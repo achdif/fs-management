@@ -14,5 +14,13 @@
   "devDependencies": {
     "typescript": "^7.0.0",
     "@types/react": "*"
+  },
+  "codegenConfig": {
+    "name": "RTNAuthSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/native"
+  },
+  "swiftpmConfig": {
+    "minimumDeploymentTarget": "13.0"
   }
 }

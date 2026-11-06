@@ -1,0 +1,6 @@
+{
+  "name": "MobileApp",
+  "displayName": "MobileApp",
+  "entryFile": "apps/mobile/index.ts"
+}
+

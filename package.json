@@ -2,8 +2,9 @@
   "name": "fs-management",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "apps/mobile/index.ts",
   "scripts": {
+    "start": "pnpm --filter mobile start",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -19,7 +20,12 @@
   "homepage": "https://github.com/achdif/fs-management#readme",
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "turbo": "^2.11.10",
-    "typescript": "^7.0.2"
+    "patch-package": "^8.0.1",
+    "turbo": "^2.11.10"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.10",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
