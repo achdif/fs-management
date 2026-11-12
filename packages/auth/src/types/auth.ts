@@ -16,6 +16,7 @@ export interface AuthState {
   isLoading: boolean;
   error: string | null;
   errorCode: string | null;
+  errorSource: string | null;
   isNetworkError: boolean;
 }
 

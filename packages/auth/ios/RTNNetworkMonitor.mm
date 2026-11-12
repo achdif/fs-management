@@ -1,16 +1,19 @@
 #import <React/RCTBridgeModule.h>
-#import <React/RCTEventEmitter.h>
 #import <RTNAuthSpec/RTNAuthSpec.h>
 #import <Network/Network.h>
+#import <dispatch/dispatch.h>
 
-@interface RTNNetworkMonitorSpec : RCTEventEmitter <NativeNetworkMonitorSpec>
-@property (nonatomic, strong) nw_path_monitor_t pathMonitor;
-@property (nonatomic, strong) nw_path_t lastPath;
+@interface RTNNetworkMonitor : NativeNetworkMonitorSpecBase <NativeNetworkMonitorSpec>
 @end
 
-@implementation RTNNetworkMonitorSpec
+@implementation RTNNetworkMonitor {
+  nw_path_monitor_t _monitor;
+  dispatch_queue_t _monitorQueue;
+  BOOL _isConnected;
+  NSString *_connectionType;
+}
 
-RCT_EXPORT_MODULE()
+RCT_EXPORT_MODULE(RTNNetworkMonitor)
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
@@ -18,86 +21,95 @@ RCT_EXPORT_MODULE()
   return std::make_shared<facebook::react::NativeNetworkMonitorSpecJSI>(params);
 }
 
-- (instancetype)init {
+- (instancetype)init
+{
   if (self = [super init]) {
-    _pathMonitor = nw_path_monitor_create();
-    nw_path_monitor_set_queue(_pathMonitor, dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0));
-    nw_path_monitor_set_update_handler(_pathMonitor, ^(nw_path_t path) {
-      [self handlePathUpdate:path];
-    });
+    _monitorQueue = dispatch_queue_create("com.fsmanagement.networkmonitor", DISPATCH_QUEUE_SERIAL);
+    _isConnected = NO;
+    _connectionType = @"none";
   }
   return self;
 }
 
-- (void)dealloc {
-  if (_pathMonitor) {
-    nw_path_monitor_cancel(_pathMonitor);
-  }
-}
+- (void)getCurrentStatus:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+  // Probe status path secara live — _isConnected hanya akurat jika
+  // startListening sudah dipanggil, jadi jangan andalkan cache.
+  // Dikerjakan di background queue agar tidak memblokir thread pemanggil.
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+    nw_path_monitor_t probe = nw_path_monitor_create();
+    nw_path_monitor_set_queue(probe, dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0));
 
-- (void)handlePathUpdate:(nw_path_t)path {
-  _lastPath = path;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    __block BOOL connected = NO;
+    __block NSString *type = @"none";
 
-  NSDictionary *status = [self statusFromPath:path];
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [self sendEventWithName:@"networkStatusDidChange" body:status];
+    nw_path_monitor_set_update_handler(probe, ^(nw_path_t path) {
+      connected = nw_path_get_status(path) == nw_path_status_satisfied;
+      type = @"none";
+      if (connected) {
+        if (nw_path_uses_interface_type(path, nw_interface_type_wifi)) {
+          type = @"wifi";
+        } else if (nw_path_uses_interface_type(path, nw_interface_type_cellular)) {
+          type = @"cellular";
+        } else if (nw_path_uses_interface_type(path, nw_interface_type_wired)) {
+          type = @"ethernet";
+        } else {
+          type = @"other";
+        }
+      }
+      dispatch_semaphore_signal(sem);
+    });
+
+    nw_path_monitor_start(probe);
+    dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)));
+    nw_path_monitor_cancel(probe);
+
+    resolve(@{@"isConnected": @(connected), @"type": type ?: @"none"});
   });
 }
 
-- (NSDictionary *)statusFromPath:(nw_path_t)path {
-  BOOL isConnected = nw_path_get_status(path) == nw_path_status_satisfied;
-  NSString *type = @"none";
+- (void)startListening
+{
+  if (_monitor != NULL) {
+    return;
+  }
 
-  if (isConnected) {
-    __block NSString *detectedType = @"none";
-    nw_path_enumerate_interfaces(path, ^bool(nw_interface_t interface) {
-      switch (nw_interface_get_type(interface)) {
-        case nw_interface_type_wifi:
-          detectedType = @"wifi";
-          return false;
-        case nw_interface_type_cellular:
-          detectedType = @"cellular";
-          return false;
-        case nw_interface_type_wired:
-          detectedType = @"ethernet";
-          return false;
-        default:
-          return true;
+  _monitor = nw_path_monitor_create();
+  nw_path_monitor_set_queue(_monitor, _monitorQueue);
+  nw_path_monitor_set_update_handler(_monitor, ^(nw_path_t path) {
+    BOOL connected = nw_path_get_status(path) == nw_path_status_satisfied;
+    NSString *type = @"none";
+    if (connected) {
+      if (nw_path_uses_interface_type(path, nw_interface_type_wifi)) {
+        type = @"wifi";
+      } else if (nw_path_uses_interface_type(path, nw_interface_type_cellular)) {
+        type = @"cellular";
+      } else if (nw_path_uses_interface_type(path, nw_interface_type_wired)) {
+        type = @"ethernet";
+      } else {
+        type = @"other";
       }
-    });
-    type = detectedType;
-  }
-
-  return @{
-    @"isConnected": @(isConnected),
-    @"type": type
-  };
+    }
+    self->_isConnected = connected;
+    self->_connectionType = type;
+  });
+  nw_path_monitor_start(_monitor);
 }
 
-- (NSDictionary *)getCurrentStatus {
-  if (_lastPath) {
-    return [self statusFromPath:_lastPath];
-  }
-  return @{
-    @"isConnected": @NO,
-    @"type": @"none"
-  };
-}
-
-- (void)startMonitoring {
-  if (_pathMonitor) {
-    nw_path_monitor_start(_pathMonitor);
+- (void)stopListening
+{
+  if (_monitor != NULL) {
+    nw_path_monitor_cancel(_monitor);
+    nw_path_monitor_set_update_handler(_monitor, nil);
+    _monitor = nil;
   }
 }
 
-- (void)stopMonitoring {
-  if (_pathMonitor) {
-    nw_path_monitor_cancel(_pathMonitor);
-  }
-}
-
-- (NSArray<NSString *> *)supportedEvents {
-  return @[@"networkStatusDidChange"];
+- (void)invalidate
+{
+  [self stopListening];
 }
 
 @end

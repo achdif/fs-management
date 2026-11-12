@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { getApiClient } from '../services/api.client';
+import NativeNetworkMonitor from '../native/NativeNetworkMonitor';
 import { ErrorCodes } from '../utils/errorCodes';
 import type { AuthStorageService } from '../storage/factory';
 import type { LoginCredentials, RegisterCredentials, User } from '../types/auth';
@@ -10,21 +11,36 @@ interface UseAuthOptions {
 }
 
 export function useAuth({ storage }: UseAuthOptions) {
-  const { user, isAuthenticated, isLoading, error, errorCode, isNetworkError, setUser, setLoading, setError, logout } = useAuthStore();
+  const { user, isAuthenticated, isLoading, error, errorCode, errorSource, isNetworkError, setUser, setLoading, setError, setRetryAction, logout } = useAuthStore();
 
-  const isNetworkFailure = (err: unknown): boolean => {
+  const isNetworkFailure = async (err: unknown): Promise<boolean> => {
+    // Server merespons dengan HTTP error (punya status) = bukan network error,
+    // walaupun pesannya mengandung kata "connection"/"fetch" (mis. DB connection failed).
+    if (err && typeof err === 'object' && typeof (err as any).status === 'number') {
+      return false;
+    }
     const message = err instanceof Error ? err.message : '';
-    return message.includes('network') ||
-           message.includes('connection') ||
+    const looksLikeNetwork = message.includes('network') ||
            message.includes('ENOTFOUND') ||
            message.includes('ECONNREFUSED') ||
            message.includes('ETIMEDOUT') ||
-           message.includes('fetch') ||
+           message.includes('fetch failed') ||
            message.includes('Network request failed') ||
            (err instanceof Error && err.name === 'NetworkError');
+    if (!looksLikeNetwork) {
+      return false;
+    }
+    // Fetch gagal: bedakan device offline vs backend/server down.
+    // Device masih online berarti masalahnya di server → bukan network error.
+    try {
+      const status = await NativeNetworkMonitor.getCurrentStatus();
+      return !status.isConnected;
+    } catch {
+      return true;
+    }
   };
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
+  const login = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
@@ -33,7 +49,8 @@ export function useAuth({ storage }: UseAuthOptions) {
       const res = await api.signin(credentials);
 
       if (!res.success || !res.tokens) {
-        setError('Invalid email or password', ErrorCodes.AUTH_INVALID_CREDENTIALS);
+        setError('Invalid email or password', ErrorCodes.AUTH_INVALID_CREDENTIALS, false, 'login');
+        setRetryAction(() => () => { void login(credentials); });
         return false;
       }
 
@@ -49,16 +66,17 @@ export function useAuth({ storage }: UseAuthOptions) {
       return true;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Login failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = err.code || (isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.DATABASE_CONNECTION_FAILED);
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'login');
+      setRetryAction(() => () => { void login(credentials); });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [storage, setLoading, setError, setUser]);
+  }, [storage, setLoading, setError, setRetryAction, setUser]);
 
-  const register = useCallback(async (credentials: RegisterCredentials) => {
+  const register = useCallback(async (credentials: RegisterCredentials): Promise<{ success: boolean; email?: string }> => {
     setLoading(true);
     setError(null);
 
@@ -74,16 +92,17 @@ export function useAuth({ storage }: UseAuthOptions) {
       return { success: res.success, email: credentials.email };
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Registration failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = err.code || (isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.DATABASE_QUERY_FAILED);
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'register');
+      setRetryAction(() => () => { void register(credentials); });
       return { success: false };
     } finally {
       setLoading(false);
     }
-  }, [setLoading, setError]);
+  }, [setLoading, setError, setRetryAction]);
 
-  const verifyOTP = useCallback(async (email: string, otp: string) => {
+  const verifyOTP = useCallback(async (email: string, otp: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
@@ -93,16 +112,17 @@ export function useAuth({ storage }: UseAuthOptions) {
       return res.success;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'OTP verification failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = err.code || (isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.AUTH_OTP_INVALID);
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'otp');
+      setRetryAction(() => () => { void verifyOTP(email, otp); });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [setLoading, setError]);
+  }, [setLoading, setError, setRetryAction]);
 
-  const forgotPassword = useCallback(async (email: string) => {
+  const forgotPassword = useCallback(async (email: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
@@ -112,16 +132,17 @@ export function useAuth({ storage }: UseAuthOptions) {
       return res.success;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Failed to send reset link';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = err.code || (isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.GMAIL_SEND_FAILED);
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'forgot');
+      setRetryAction(() => () => { void forgotPassword(email); });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [setLoading, setError]);
+  }, [setLoading, setError, setRetryAction]);
 
-  const resetPassword = useCallback(async (token: string, newPassword: string) => {
+  const resetPassword = useCallback(async (token: string, newPassword: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
@@ -131,16 +152,17 @@ export function useAuth({ storage }: UseAuthOptions) {
       return res.success;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Password reset failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = err.code || (isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.AUTH_RESET_TOKEN_INVALID);
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'reset');
+      setRetryAction(() => () => { void resetPassword(token, newPassword); });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [setLoading, setError]);
+  }, [setLoading, setError, setRetryAction]);
 
-  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
@@ -150,16 +172,17 @@ export function useAuth({ storage }: UseAuthOptions) {
       return res.success;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Password change failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = err.code || (isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.AUTH_INVALID_CREDENTIALS);
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'changePassword');
+      setRetryAction(() => () => { void changePassword(currentPassword, newPassword); });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [setLoading, setError]);
+  }, [setLoading, setError, setRetryAction]);
 
-  const logoutUser = useCallback(async () => {
+  const logoutUser = useCallback(async (): Promise<boolean> => {
     setLoading(true);
 
     try {
@@ -176,14 +199,15 @@ export function useAuth({ storage }: UseAuthOptions) {
       return true;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Logout failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = isNet ? ErrorCodes.DEVICE_NETWORK_OFFLINE : ErrorCodes.DATABASE_CONNECTION_FAILED;
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'logout');
+      setRetryAction(() => () => { void logoutUser(); });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [storage, setLoading, setError, logout]);
+  }, [storage, setLoading, setError, setRetryAction, logout]);
 
   const checkAuth = useCallback(async () => {
     setLoading(true);
@@ -214,13 +238,13 @@ export function useAuth({ storage }: UseAuthOptions) {
       return false;
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Authentication check failed';
-      const isNet = isNetworkFailure(err);
+      const isNet = await isNetworkFailure(err);
       const code = message.includes('expired') || message.includes('token')
         ? ErrorCodes.AUTH_TOKEN_EXPIRED
         : isNet
         ? ErrorCodes.DEVICE_NETWORK_OFFLINE
         : ErrorCodes.DATABASE_CONNECTION_FAILED;
-      setError(message, code, isNet);
+      setError(message, code, isNet, 'checkAuth');
       logout();
       return false;
     } finally {
@@ -228,13 +252,28 @@ export function useAuth({ storage }: UseAuthOptions) {
     }
   }, [storage, setLoading, logout, setUser, setError]);
 
+  const clearError = useCallback(() => {
+    setError(null);
+    setRetryAction(null);
+  }, [setError, setRetryAction]);
+
+  const retryLastAction = useCallback(() => {
+    const action = useAuthStore.getState().retryAction;
+    if (action) {
+      action();
+    }
+  }, []);
+
   return {
     user,
     isAuthenticated,
     isLoading,
     error,
     errorCode,
+    errorSource,
     isNetworkError,
+    clearError,
+    retryLastAction,
     login,
     register,
     verifyOTP,

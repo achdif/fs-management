@@ -13,7 +13,8 @@
   },
   "devDependencies": {
     "typescript": "^7.0.0",
-    "@types/react": "*"
+    "@types/react": "*",
+    "react-native": "0.88.1"
   },
   "codegenConfig": {
     "name": "RTNAuthSpec",

@@ -1,14 +1,13 @@
 #import <React/RCTBridgeModule.h>
-#import <React/RCTEventEmitter.h>
 #import <RTNAuthSpec/RTNAuthSpec.h>
 #import <LocalAuthentication/LocalAuthentication.h>
 
-@interface RTNBiometricAuthSpec : NSObject <NativeBiometricAuthSpec>
+@interface RTNBiometricAuth : NativeBiometricAuthSpecBase <NativeBiometricAuthSpec>
 @end
 
-@implementation RTNBiometricAuthSpec
+@implementation RTNBiometricAuth
 
-RCT_EXPORT_MODULE()
+RCT_EXPORT_MODULE(RTNBiometricAuth)
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
@@ -16,12 +15,14 @@ RCT_EXPORT_MODULE()
   return std::make_shared<facebook::react::NativeBiometricAuthSpecJSI>(params);
 }
 
-- (NSDictionary *)checkAvailability
+- (void)isAvailable:(RCTPromiseResolveBlock)resolve
+             reject:(RCTPromiseRejectBlock)reject
 {
   LAContext *context = [[LAContext alloc] init];
   NSError *error = nil;
-  
-  if ([context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:&error]) {
+
+  if ([context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+                           error:&error]) {
     NSString *type = @"none";
     if (@available(iOS 11.0, *)) {
       if (context.biometryType == LABiometryTypeFaceID) {
@@ -30,80 +31,52 @@ RCT_EXPORT_MODULE()
         type = @"touchid";
       }
     }
-    return @{
-      @"available": @YES,
-      @"type": type
-    };
+    resolve(@{@"available": @YES, @"type": type});
+  } else {
+    resolve(@{@"available": @NO, @"type": @"none"});
   }
-  
-  return @{
-    @"available": @NO,
-    @"type": @"none"
-  };
 }
 
-- (NSDictionary *)authenticate:(NSString *)reason
+- (void)authenticate:(NSString *)reason
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject
 {
   LAContext *context = [[LAContext alloc] init];
-  __block NSError *error = nil;
-  
   [context setLocalizedFallbackTitle:@"Use Passcode"];
-  
-  LAPolicy policy = LAPolicyDeviceOwnerAuthenticationWithBiometrics;
-  
-  __block BOOL success = NO;
-  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-  
-  [context evaluatePolicy:policy
-          localizedReason:reason
-                    reply:^(BOOL didSucceed, NSError *authError) {
-    success = didSucceed;
-    error = authError;
-    dispatch_semaphore_signal(semaphore);
-  }];
-  
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-  
-  if (success) {
-    return @{
-      @"success": @YES
-    };
-  }
-  
-  NSString *errorMessage = @"Authentication failed";
-  if (error) {
-    switch (error.code) {
-      case kLAErrorUserCancel:
-        errorMessage = @"User cancelled";
-        break;
-      case kLAErrorUserFallback:
-        errorMessage = @"User chose password";
-        break;
-      case kLAErrorSystemCancel:
-        errorMessage = @"System cancelled";
-        break;
-      case kLAErrorPasscodeNotSet:
-        errorMessage = @"No passcode set";
-        break;
-      case kLAErrorBiometryNotAvailable:
-        errorMessage = @"Biometry not available";
-        break;
-      case kLAErrorBiometryNotEnrolled:
-        errorMessage = @"Biometry not enrolled";
-        break;
-      case kLAErrorBiometryLockout:
-        errorMessage = @"Biometry locked out";
-        break;
-      default:
-        errorMessage = error.localizedDescription;
-        break;
+
+  [context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+          localizedReason:reason ?: @"Authenticate"
+                    reply:^(BOOL success, NSError *error) {
+    if (success) {
+      resolve(@{@"success": @YES});
+      return;
     }
-  }
-  
-  return @{
-    @"success": @NO,
-    @"error": errorMessage
-  };
+
+    NSString *message = @"Authentication failed";
+    if (error) {
+      switch (error.code) {
+        case kLAErrorUserCancel:
+          message = @"User cancelled";
+          break;
+        case kLAErrorUserFallback:
+          message = @"User chose passcode";
+          break;
+        case kLAErrorBiometryNotAvailable:
+          message = @"Biometry not available";
+          break;
+        case kLAErrorBiometryNotEnrolled:
+          message = @"Biometry not enrolled";
+          break;
+        case kLAErrorBiometryLockout:
+          message = @"Biometry locked out";
+          break;
+        default:
+          message = error.localizedDescription ?: message;
+          break;
+      }
+    }
+    resolve(@{@"success": @NO, @"error": message});
+  }];
 }
 
 @end
