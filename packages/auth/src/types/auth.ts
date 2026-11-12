@@ -31,3 +31,9 @@ export interface RegisterCredentials {
   fullName: string;
   phone?: string;
 }
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}

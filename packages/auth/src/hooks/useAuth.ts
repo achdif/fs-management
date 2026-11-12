@@ -1,16 +1,22 @@
 import { useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { getApiClient } from '../services/api.client';
-import NativeNetworkMonitor from '../native/NativeNetworkMonitor';
+import NativeNetworkMonitor from '@fs-management/shared/src/native/NativeNetworkMonitor';
 import { ErrorCodes } from '../utils/errorCodes';
-import type { AuthStorageService } from '../storage/factory';
+import type { AuthStorageService } from '@fs-management/shared';
 import type { LoginCredentials, RegisterCredentials, User } from '../types/auth';
 
 interface UseAuthOptions {
-  storage: AuthStorageService;
+  /** Wajib untuk bearer mode (mobile). Diabaikan saat cookieAuth=true. */
+  storage?: AuthStorageService;
+  /**
+   * true = web: token disimpan backend sebagai HttpOnly cookie,
+   * JS tidak pernah menyimpan/mengirim token manual.
+   */
+  cookieAuth?: boolean;
 }
 
-export function useAuth({ storage }: UseAuthOptions) {
+export function useAuth({ storage, cookieAuth = false }: UseAuthOptions) {
   const { user, isAuthenticated, isLoading, error, errorCode, errorSource, isNetworkError, setUser, setLoading, setError, setRetryAction, logout } = useAuthStore();
 
   const isNetworkFailure = async (err: unknown): Promise<boolean> => {
@@ -48,15 +54,18 @@ export function useAuth({ storage }: UseAuthOptions) {
       const api = getApiClient();
       const res = await api.signin(credentials);
 
-      if (!res.success || !res.tokens) {
+      if (!res.success || (!cookieAuth && !res.tokens)) {
         setError('Invalid email or password', ErrorCodes.AUTH_INVALID_CREDENTIALS, false, 'login');
         setRetryAction(() => () => { void login(credentials); });
         return false;
       }
 
-      // Store tokens
-      await storage.setTokens(res.tokens.accessToken, res.tokens.refreshToken, res.tokens.expiresAt);
-      api.setToken(res.tokens.accessToken);
+      if (!cookieAuth && res.tokens) {
+        // Bearer mode (mobile): simpan token & kirim via Authorization header.
+        await storage!.setTokens(res.tokens.accessToken, res.tokens.refreshToken, res.tokens.expiresAt);
+        api.setToken(res.tokens.accessToken);
+      }
+      // Cookie mode (web): backend sudah set HttpOnly cookie via Set-Cookie.
 
       // Set user profile
       if (res.user) {
@@ -190,8 +199,10 @@ export function useAuth({ storage }: UseAuthOptions) {
       await api.signout().catch(() => {});
       api.setToken(null);
 
-      // Clear tokens from storage
-      await storage.clearTokens();
+      // Bearer mode: clear tokens dari storage. Cookie mode: backend clear cookie.
+      if (!cookieAuth) {
+        await storage!.clearTokens();
+      }
 
       // Clear store
       logout();
@@ -207,25 +218,37 @@ export function useAuth({ storage }: UseAuthOptions) {
     } finally {
       setLoading(false);
     }
-  }, [storage, setLoading, setError, setRetryAction, logout]);
+  }, [storage, cookieAuth, setLoading, setError, setRetryAction, logout]);
 
   const checkAuth = useCallback(async () => {
     setLoading(true);
 
     try {
-      const isExpired = await storage.isTokenExpired();
+      const api = getApiClient();
+
+      if (cookieAuth) {
+        // Web: cookie terkirim otomatis; 401 → belum login.
+        const res = await api.getMe();
+        if (res?.user) {
+          setUser(res.user as User);
+          return true;
+        }
+        logout();
+        return false;
+      }
+
+      const isExpired = await storage!.isTokenExpired();
       if (isExpired) {
         logout();
         return false;
       }
 
-      const accessToken = await storage.getAccessToken();
+      const accessToken = await storage!.getAccessToken();
       if (!accessToken) {
         logout();
         return false;
       }
 
-      const api = getApiClient();
       api.setToken(accessToken);
 
       const res = await api.getMe();
@@ -250,7 +273,7 @@ export function useAuth({ storage }: UseAuthOptions) {
     } finally {
       setLoading(false);
     }
-  }, [storage, setLoading, logout, setUser, setError]);
+  }, [storage, cookieAuth, setLoading, logout, setUser, setError]);
 
   const clearError = useCallback(() => {
     setError(null);

@@ -5,16 +5,19 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test:web": "node scripts/test-web.mjs"
   },
   "dependencies": {
-    "zustand": "^5.0.2",
-    "react": "*"
+    "@fs-management/shared": "workspace:*",
+    "react": "*",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "typescript": "^7.0.0",
     "@types/react": "*",
-    "react-native": "0.88.1"
+    "esbuild": "^0.28.2",
+    "react-native": "0.88.1",
+    "typescript": "^7.0.0"
   },
   "codegenConfig": {
     "name": "RTNAuthSpec",

@@ -6,6 +6,7 @@ use axum::{
 use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use axum::http::HeaderValue;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
 
@@ -60,10 +61,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         email,
     };
 
+    // CORS_ORIGIN bisa comma-separated list, mis. "http://localhost:3000,https://app.example.com"
+    let origins: Vec<HeaderValue> = cfg
+        .cors_origin
+        .split(',')
+        .filter_map(|o| HeaderValue::from_str(o.trim()).ok())
+        .collect();
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(origins)
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers(Any)
+        .allow_credentials(true);
 
     let app = Router::new()
         .route("/health", get(health_check))

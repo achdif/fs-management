@@ -1,7 +1,13 @@
-import type { AuthTokens } from '../storage/types';
+import type { AuthTokens } from '../types/auth';
 
 export interface ApiClientConfig {
   baseUrl: string;
+  /**
+   * 'bearer' (default): kirim Authorization: Bearer <token> — mobile.
+   * 'cookie': andalkan HttpOnly cookie dari backend — web. Token tidak
+   * pernah masuk JS; setToken() menjadi no-op.
+   */
+  authMode?: 'bearer' | 'cookie';
 }
 
 export type { AuthTokens };
@@ -9,12 +15,15 @@ export type { AuthTokens };
 export class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
+  private authMode: 'bearer' | 'cookie';
 
   constructor(config: ApiClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
+    this.authMode = config.authMode ?? 'bearer';
   }
 
   setToken(token: string | null) {
+    if (this.authMode === 'cookie') return;
     this.token = token;
   }
 
@@ -32,6 +41,7 @@ export class ApiClient {
     const response = await fetch(url, {
       ...options,
       headers,
+      ...(this.authMode === 'cookie' ? { credentials: 'include' as const } : {}),
     });
 
     const data = await response.json().catch(() => ({}));
