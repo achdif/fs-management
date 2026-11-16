@@ -7,7 +7,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use surrealdb::sql::Thing;
+use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
@@ -54,13 +54,15 @@ pub struct ChangePasswordPayload {
     pub new_password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, SurrealValue)]
+#[surreal(crate = "surrealdb::types")]
 pub struct UserRecord {
-    pub id: Option<Thing>,
+    pub id: Option<RecordId>,
     pub email: String,
     #[serde(skip_serializing)]
     pub password: Option<String>,
     #[serde(rename = "fullName")]
+    #[surreal(rename = "fullName")]
     pub full_name: Option<String>,
     pub phone: Option<String>,
 }
@@ -84,17 +86,25 @@ pub async fn signup(
         return Err(AppError::EmailAlreadyExists);
     }
 
+    let mut content = json!({
+        "email": payload.email,
+        "password": payload.password,
+        "roles": ["user"],
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "updated_at": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Some(map) = content.as_object_mut() {
+        if let Some(name) = payload.full_name {
+            map.insert("fullName".to_string(), json!(name));
+        }
+        if let Some(phone) = payload.phone {
+            map.insert("phone".to_string(), json!(phone));
+        }
+    }
+
     let created: Option<UserRecord> = state.db
         .create("user")
-        .content(json!({
-            "email": payload.email,
-            "password": payload.password,
-            "fullName": payload.full_name,
-            "phone": payload.phone,
-            "roles": ["user"],
-            "created_at": chrono::Utc::now().to_rfc3339(),
-            "updated_at": chrono::Utc::now().to_rfc3339(),
-        }))
+        .content(content)
         .await
         .map_err(|e| AppError::DatabaseError(e.to_string()))?;
 
@@ -143,7 +153,7 @@ pub async fn signin(
     let _ = state.redis.reset_failed_login_attempts(&payload.email).await;
 
     // 4. Generate tokens
-    let user_id = user.id.as_ref().map(|t| t.to_raw()).unwrap_or_else(|| user.email.clone());
+    let user_id = user.id.as_ref().map(|t| t.to_sql()).unwrap_or_else(|| user.email.clone());
     let jti = uuid::Uuid::new_v4().to_string();
 
     let access_token = generate_token(

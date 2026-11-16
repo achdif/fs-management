@@ -190,6 +190,51 @@ SMTP_FROM_EMAIL=email_anda@gmail.com
 openssl rand -base64 32
 ```
 
+#### 5.2 Setup Lokal (SurrealDB + Redis via Homebrew)
+
+Untuk development lokal tanpa SurrealDB Cloud / Upstash, jalankan kedua service secara lokal:
+
+```bash
+# Install (SurrealDB tersedia via tap resmi, bukan homebrew-core)
+brew install redis surrealdb/tap/surreal surrealdb/tap/surreal-db
+
+# Jalankan sebagai background service (auto-start saat login)
+brew services start redis
+brew services start surrealdb/tap/surreal-db
+```
+
+SurrealDB akan berjalan di `127.0.0.1:8000` dengan auth `root`/`root` dan data persisten di `/opt/homebrew/var/surreal.db` (engine rocksdb — data tidak hilang saat restart).
+
+Isi `crates/server/.env` untuk mode lokal:
+
+```env
+SERVER_PORT=8080
+SERVER_HOST=0.0.0.0
+CORS_ORIGIN=http://localhost:3000
+
+# SurrealDB Lokal
+SURREALDB_URL=ws://127.0.0.1:8000/rpc
+SURREALDB_NAMESPACE=test
+SURREALDB_DATABASE=test
+SURREALDB_USERNAME=root
+SURREALDB_PASSWORD=root
+
+# Redis Lokal
+UPSTASH_REDIS_URL=redis://127.0.0.1:6379
+
+JWT_SECRET=<hasil openssl rand -base64 32>
+JWT_EXPIRATION_MINUTES=15
+REFRESH_TOKEN_EXPIRATION_DAYS=30
+```
+
+> **Catatan**: Schema database (tabel `user` + index email) dibuat otomatis saat backend start — tidak perlu setup manual. Data tetap persisten antar restart; untuk reset total hapus `/opt/homebrew/var/surreal.db` lalu restart service.
+
+Verifikasi service:
+```bash
+redis-cli ping        # → PONG
+curl http://127.0.0.1:8000/version   # → surrealdb-4.x.x
+```
+
 ---
 
 ### 6. Setup Email (Gmail)
@@ -206,6 +251,11 @@ openssl rand -base64 32
 Buka 2 tab/jendela terminal terpisah untuk menjalankan Backend dan Mobile:
 
 ### Terminal 1: Jalankan Backend Server (Rust)
+Pastikan Redis dan SurrealDB sudah jalan (lihat [5.2 Setup Lokal](#52-setup-lokal-surrealdb--redis-via-homebrew)):
+```bash
+brew services list   # redis & surreal-db harus 'started'
+```
+
 ```bash
 # Dari root monorepo
 cargo run --bin server

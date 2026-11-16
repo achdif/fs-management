@@ -1,4 +1,5 @@
 use axum::{
+    http::{header, HeaderValue, Method},
     response::Json,
     routing::get,
     Router,
@@ -6,8 +7,7 @@ use axum::{
 use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use axum::http::HeaderValue;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tracing::{info, warn};
 
 mod config;
@@ -69,8 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     let cors = CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods(Any)
-        .allow_headers(Any)
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::OPTIONS])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::COOKIE])
         .allow_credentials(true);
 
     let app = Router::new()
