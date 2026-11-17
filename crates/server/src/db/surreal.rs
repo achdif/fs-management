@@ -1,4 +1,4 @@
-use surrealdb::engine::remote::ws::{Client, Ws};
+use surrealdb::engine::remote::ws::{Client, Ws, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 use tracing::info;
@@ -20,7 +20,13 @@ pub async fn create_surreal_connection(config: &AppConfig) -> Result<DbConnectio
         .next()
         .unwrap_or_default()
         .to_string();
-    let db = Surreal::new::<Ws>(&endpoint).await?;
+    // surrealdb 4.x: Ws dan Wss adalah engine berbeda — scheme tidak di-parse
+    // dari string, jadi harus dipilih berdasarkan prefix URL.
+    let db = if config.surrealdb_url.starts_with("wss://") {
+        Surreal::new::<Wss>(&endpoint).await?
+    } else {
+        Surreal::new::<Ws>(&endpoint).await?
+    };
 
     if let (Some(user), Some(pass)) = (&config.surrealdb_username, &config.surrealdb_password) {
         db.signin(Root {

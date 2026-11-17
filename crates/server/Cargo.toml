@@ -12,7 +12,7 @@ tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Database
-surrealdb = { version = "4.0", features = ["protocol-ws"] }
+surrealdb = { version = "4.0", features = ["protocol-ws", "rustls"] }
 
 # Serialization & Config
 serde = { version = "1.0", features = ["derive"] }
