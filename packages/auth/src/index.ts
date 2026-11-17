@@ -1,4 +1,5 @@
 export * from './services/api.client';
+export * from './config';
 export * from './types/auth';
 export * from './store/authStore';
 export * from './hooks/useAuth';

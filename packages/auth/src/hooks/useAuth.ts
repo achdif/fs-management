@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { getApiClient } from '../services/api.client';
+import { AUTH_MODE } from '../config';
 import NativeNetworkMonitor from '@fs-management/shared/src/native/NativeNetworkMonitor';
 import { ErrorCodes } from '../utils/errorCodes';
 import type { AuthStorageService } from '@fs-management/shared';
@@ -10,13 +11,14 @@ interface UseAuthOptions {
   /** Wajib untuk bearer mode (mobile). Diabaikan saat cookieAuth=true. */
   storage?: AuthStorageService;
   /**
+   * Default mengikuti AUTH_MODE platform (web = cookie, native = bearer).
    * true = web: token disimpan backend sebagai HttpOnly cookie,
    * JS tidak pernah menyimpan/mengirim token manual.
    */
   cookieAuth?: boolean;
 }
 
-export function useAuth({ storage, cookieAuth = false }: UseAuthOptions) {
+export function useAuth({ storage, cookieAuth = AUTH_MODE === 'cookie' }: UseAuthOptions = {}) {
   const { user, isAuthenticated, isLoading, error, errorCode, errorSource, isNetworkError, setUser, setLoading, setError, setRetryAction, logout } = useAuthStore();
 
   const isNetworkFailure = async (err: unknown): Promise<boolean> => {

@@ -1,4 +1,5 @@
 import type { AuthTokens } from '../types/auth';
+import { API_BASE_URL, AUTH_MODE } from '../config';
 
 export interface ApiClientConfig {
   baseUrl: string;
@@ -121,12 +122,13 @@ export class ApiClient {
 
 let apiInstance: ApiClient | null = null;
 
-export function getApiClient(config?: ApiClientConfig): ApiClient {
-  if (!apiInstance && config) {
-    apiInstance = new ApiClient(config);
-  }
+export function getApiClient(config?: Partial<ApiClientConfig>): ApiClient {
   if (!apiInstance) {
-    throw new Error('ApiClient not initialized. Call getApiClient with config first.');
+    apiInstance = new ApiClient({
+      baseUrl: API_BASE_URL,
+      authMode: AUTH_MODE,
+      ...config,
+    });
   }
   return apiInstance;
 }
