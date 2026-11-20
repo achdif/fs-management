@@ -76,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/health", get(health_check))
         .nest("/api/v1/auth", routes::auth::auth_routes())
+        .merge(routes::flow1::flow1_routes())
         .with_state(app_state)
         .layer(cors);
 

@@ -49,5 +49,8 @@ pub async fn create_surreal_connection(config: &AppConfig) -> Result<DbConnectio
     let _: surrealdb::types::Value = migration.take(0)?;
     info!("Schema migration applied (user table + email index)");
 
+    // Flow 1 — Pre-Book & Follow-up schema
+    crate::db::migrations::run_flow1_migration(&db).await?;
+
     Ok(db)
 }

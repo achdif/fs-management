@@ -14,6 +14,8 @@ pub enum AppError {
     DatabaseError(String),
     Internal(String),
     BadRequest(String),
+    NotFound(String),
+    Conflict(String),
 }
 
 impl IntoResponse for AppError {
@@ -47,6 +49,16 @@ impl IntoResponse for AppError {
             AppError::BadRequest(msg) => (
                 StatusCode::BAD_REQUEST,
                 "BAD_REQUEST".to_string(),
+                msg,
+            ),
+            AppError::NotFound(msg) => (
+                StatusCode::NOT_FOUND,
+                "NOT_FOUND".to_string(),
+                msg,
+            ),
+            AppError::Conflict(msg) => (
+                StatusCode::CONFLICT,
+                "CONFLICT".to_string(),
                 msg,
             ),
             AppError::Internal(err) => (
