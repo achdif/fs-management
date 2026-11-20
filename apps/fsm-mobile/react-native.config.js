@@ -12,6 +12,9 @@ module.exports = {
     '@fs-management/booking': {
       root: path.resolve(__dirname, '../packages/booking'),
     },
+    '@fs-management/prebook': {
+      root: path.resolve(__dirname, '../packages/prebook'),
+    },
     '@fs-management/shared': {
       root: path.resolve(__dirname, '../packages/shared'),
     },

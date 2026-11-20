@@ -17,6 +17,7 @@ const HomeScreen = () => {
   const actions = [
     {icon: '📊', label: 'Dashboard'},
     {icon: '📅', label: 'Schedule'},
+    {icon: '🎯', label: 'Pipeline'},
     {icon: '⚙️', label: 'Settings'},
   ];
 
@@ -57,7 +58,14 @@ const HomeScreen = () => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           {actions.map(action => (
-            <TouchableOpacity key={action.label} style={styles.actionCard}>
+            <TouchableOpacity
+              key={action.label}
+              style={styles.actionCard}
+              onPress={() => {
+                if (action.label === 'Pipeline') {
+                  navigation.navigate('Pipeline' as never);
+                }
+              }}>
               <Text style={styles.actionIcon}>{action.icon}</Text>
               <Text style={styles.actionLabel}>{action.label}</Text>
             </TouchableOpacity>
