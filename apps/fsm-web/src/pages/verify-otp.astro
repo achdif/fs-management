@@ -1,0 +1,12 @@
+---
+import Screen from '../layouts/Screen.astro';
+import OtpForm from '../components/auth/OtpForm';
+
+const email = Astro.url.searchParams.get('email') ?? '';
+---
+
+<Screen title="Verify OTP — FSM">
+  <div class="flex flex-1 flex-col px-6">
+    <OtpForm client:load email={email} />
+  </div>
+</Screen>

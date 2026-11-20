@@ -33,3 +33,6 @@ Package.resolved
 build/generated/
 build/xcframeworks/
 .build/
+
+# Service rental docs/specs (not part of codebase)
+service_rental/

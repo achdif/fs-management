@@ -1,0 +1,10 @@
+---
+import Screen from '../layouts/Screen.astro';
+import RegisterForm from '../components/auth/RegisterForm';
+---
+
+<Screen title="Sign Up — FSM">
+  <div class="flex flex-1 flex-col px-6">
+    <RegisterForm client:load />
+  </div>
+</Screen>

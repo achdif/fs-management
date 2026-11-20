@@ -1,0 +1,24 @@
+---
+import Base from './Base.astro';
+import GlobalErrorSheet from '../components/GlobalErrorSheet';
+
+interface Props {
+  title?: string;
+  /** Background screen: 'auth' (#fafaff) atau 'home' (#f5f5f5) */
+  tone?: 'auth' | 'home';
+}
+
+const { title, tone = 'auth' } = Astro.props;
+---
+
+<Base title={title}>
+  <main
+    class:list={[
+      'phone-screen mx-auto flex min-h-dvh w-full max-w-[430px] flex-col',
+      tone === 'home' ? 'bg-home-bg' : 'bg-bg',
+    ]}
+  >
+    <slot />
+  </main>
+  <GlobalErrorSheet client:load />
+</Base>

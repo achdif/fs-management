@@ -1,0 +1,10 @@
+---
+import Screen from '../layouts/Screen.astro';
+import LoginForm from '../components/auth/LoginForm';
+---
+
+<Screen title="Sign In — FSM">
+  <div class="flex flex-1 flex-col px-6">
+    <LoginForm client:load />
+  </div>
+</Screen>
